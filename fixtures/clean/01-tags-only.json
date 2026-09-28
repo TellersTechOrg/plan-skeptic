@@ -1,0 +1,61 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.12.5",
+  "resource_changes": [
+    {
+      "address": "aws_db_instance.orders",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "orders",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {"identifier": "orders-db", "publicly_accessible": false, "storage_encrypted": true, "deletion_protection": true, "skip_final_snapshot": false, "tags": {"team": "payments"}},
+        "after": {"identifier": "orders-db", "publicly_accessible": false, "storage_encrypted": true, "deletion_protection": true, "skip_final_snapshot": false, "tags": {"team": "payments", "cost-center": "cc-114"}},
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_security_group.web",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "web",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "name": "web",
+          "ingress": [{"cidr_blocks": ["0.0.0.0/0"], "from_port": 443, "ipv6_cidr_blocks": [], "protocol": "tcp", "to_port": 443}],
+          "tags": {}
+        },
+        "after": {
+          "name": "web",
+          "ingress": [{"cidr_blocks": ["0.0.0.0/0"], "from_port": 443, "ipv6_cidr_blocks": [], "protocol": "tcp", "to_port": 443}],
+          "tags": {"cost-center": "cc-114"}
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_policy.exporter",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "exporter",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {"name": "report-exporter", "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:*\",\"Resource\":\"*\"}]}", "tags": {}},
+        "after": {"name": "report-exporter", "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:*\",\"Resource\":\"*\"}]}", "tags": {"cost-center": "cc-114"}},
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "data.aws_caller_identity.current",
+      "mode": "data",
+      "type": "aws_caller_identity",
+      "name": "current",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {"actions": ["read"], "before": null, "after": {}, "after_unknown": {"id": true}}
+    }
+  ]
+}

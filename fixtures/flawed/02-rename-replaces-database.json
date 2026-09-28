@@ -1,0 +1,43 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.12.5",
+  "resource_changes": [
+    {
+      "address": "aws_db_instance.orders",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "orders",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "identifier": "orders-db",
+          "engine": "postgres",
+          "engine_version": "16.4",
+          "instance_class": "db.r6g.large",
+          "allocated_storage": 200,
+          "publicly_accessible": false,
+          "storage_encrypted": true,
+          "deletion_protection": true,
+          "skip_final_snapshot": false,
+          "tags": {"team": "payments"}
+        },
+        "after": {
+          "identifier": "payments-orders-db",
+          "engine": "postgres",
+          "engine_version": "16.4",
+          "instance_class": "db.r6g.large",
+          "allocated_storage": 200,
+          "publicly_accessible": false,
+          "storage_encrypted": true,
+          "deletion_protection": false,
+          "skip_final_snapshot": false,
+          "tags": {"team": "payments"}
+        },
+        "after_unknown": {"arn": true, "endpoint": true, "id": true},
+        "replace_paths": [["identifier"]]
+      },
+      "action_reason": "replace_because_cannot_update"
+    }
+  ]
+}
