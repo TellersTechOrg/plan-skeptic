@@ -1,0 +1,46 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.12.5",
+  "resource_changes": [
+    {
+      "address": "aws_iam_policy.exporter",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "exporter",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "name": "report-exporter",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\"],\"Resource\":\"arn:aws:s3:::acme-reports/*\"}]}"
+        },
+        "after": {
+          "name": "report-exporter",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:*\",\"kms:*\"],\"Resource\":\"*\"}]}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.ci_deploy",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "ci_deploy",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "name": "ci-deploy",
+          "role": "ci",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:*\",\"Resource\":\"arn:aws:ecr:us-east-1:111122223333:repository/app\"}]}"
+        },
+        "after": {
+          "name": "ci-deploy",
+          "role": "ci",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:*\",\"Resource\":\"arn:aws:ecr:us-east-1:111122223333:repository/app\"},{\"Effect\":\"Allow\",\"NotAction\":\"iam:*\",\"Resource\":\"*\"}]}"
+        },
+        "after_unknown": {}
+      }
+    }
+  ]
+}

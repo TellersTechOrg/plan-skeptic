@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -v
+
+  action:
+    # Runs the composite action against the fixtures: a clean plan must pass
+    # and a flawed one must fail, or the action is not gating anything.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean plan passes
+        uses: ./
+        with:
+          plan-json: fixtures/clean/01-tags-only.json
+      - name: Flawed plan fails
+        id: flawed
+        continue-on-error: true
+        uses: ./
+        with:
+          plan-json: fixtures/flawed/02-rename-replaces-database.json
+          sarif-file: flawed.sarif
+      - name: Assert the flawed plan failed and wrote SARIF
+        run: |
+          test "${{ steps.flawed.outcome }}" = failure
+          python3 -c "import json; r=json.load(open('flawed.sarif'))['runs'][0]['results']; assert r, 'no results'"
