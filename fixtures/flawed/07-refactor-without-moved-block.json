@@ -1,0 +1,62 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.12.5",
+  "resource_changes": [
+    {
+      "address": "aws_dynamodb_table.orders",
+      "mode": "managed",
+      "type": "aws_dynamodb_table",
+      "name": "orders",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {"name": "orders", "billing_mode": "PAY_PER_REQUEST", "hash_key": "order_id", "deletion_protection_enabled": false},
+        "after": null,
+        "after_unknown": {}
+      },
+      "action_reason": "delete_because_no_resource_config"
+    },
+    {
+      "address": "module.orders.aws_dynamodb_table.this",
+      "mode": "managed",
+      "type": "aws_dynamodb_table",
+      "module_address": "module.orders",
+      "name": "this",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"name": "orders", "billing_mode": "PAY_PER_REQUEST", "hash_key": "order_id", "deletion_protection_enabled": false},
+        "after_unknown": {"arn": true, "id": true}
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.orders",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "orders",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {"name": "/app/orders", "retention_in_days": 365},
+        "after": null,
+        "after_unknown": {}
+      },
+      "action_reason": "delete_because_no_resource_config"
+    },
+    {
+      "address": "module.orders.aws_cloudwatch_log_group.this",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "module_address": "module.orders",
+      "name": "this",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"name": "/app/orders", "retention_in_days": 365},
+        "after_unknown": {"arn": true, "id": true}
+      }
+    }
+  ]
+}
