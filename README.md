@@ -8,7 +8,7 @@ to `s3:*` to make an error go away, SSH opened "temporarily". The diff reads
 fine. The plan says what will actually happen. `plan-skeptic` reads the plan
 and points at the lines a reviewer must not skim.
 
-It is not a policy engine and does not try to replace one. It is ten
+It is not a policy engine and does not try to replace one. It is eleven
 opinionated checks about **what a change introduces**, tuned so that the output
 is short enough to be read on every pull request.
 
@@ -41,7 +41,7 @@ PYTHONPATH=src python3 -m plan_skeptic plan.json
 - run: |
     terraform plan -out=plan.out
     terraform show -json plan.out > plan.json
-- uses: TellersTechOrg/plan-skeptic@v0.1.0
+- uses: TellersTechOrg/plan-skeptic@v0.1.1
   with:
     plan-json: plan.json
     fail-on: high          # high | medium | low | never
@@ -51,8 +51,8 @@ PYTHONPATH=src python3 -m plan_skeptic plan.json
     sarif_file: plan-skeptic.sarif
 ```
 
-Findings appear in the Security tab and inline on the pull request. Uploading
-SARIF needs `security-events: write`.
+Findings appear in the job summary, the Security tab (when SARIF is uploaded),
+and inline on the pull request. Uploading SARIF needs `security-events: write`.
 
 ## Rules
 
@@ -60,7 +60,7 @@ SARIF needs `security-events: write`.
 |---|---|---|
 | <a id="ps001"></a>PS001 | high | A data-holding resource (database, bucket, table, volume, key, PVC) is destroyed or replaced, and why it is being replaced |
 | <a id="ps002"></a>PS002 | medium | Any other resource is deleted |
-| <a id="ps003"></a>PS003 | high | An IAM policy newly grants `*` / `service:*`, or uses `NotAction` in an Allow |
+| <a id="ps003"></a>PS003 | high | An IAM policy (including role `inline_policy`) newly grants `*` / `service:*`, or uses `NotAction` in an Allow |
 | <a id="ps004"></a>PS004 | high | AdministratorAccess, PowerUserAccess or IAMFullAccess is attached |
 | <a id="ps005"></a>PS005 | high | A trust policy lets any principal assume the role without a Condition |
 | <a id="ps006"></a>PS006 | high | Ingress opened to 0.0.0.0/0 or ::/0 (medium for ports 80 and 443) |
@@ -68,6 +68,7 @@ SARIF needs `security-events: write`.
 | <a id="ps008"></a>PS008 | high | A database given `publicly_accessible = true` |
 | <a id="ps009"></a>PS009 | medium | Encryption at rest set to false |
 | <a id="ps010"></a>PS010 | medium | `deletion_protection` switched off, or `skip_final_snapshot` / `force_destroy` switched on |
+| <a id="ps011"></a>PS011 | high | A KMS key policy lets any principal use the key without a Condition |
 
 A delete paired with a create of the same type and name gets a hint to use a
 `moved` block, since that is what an unfinished refactor looks like.
@@ -96,7 +97,7 @@ refused with exit 2 rather than reported clean.
 
 ## Fixtures
 
-[`fixtures/`](fixtures/) holds seven flawed plans, each paired with the request
+[`fixtures/`](fixtures/) holds eight flawed plans, each paired with the request
 that produced it, plus a clean control. They are the exercises for the
 [Confidently Wrong workshop](https://www.tellerstech.com/workshops/ai-era-infrastructure-risk-workshop/)
 and come from the same material as the book
