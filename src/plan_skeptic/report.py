@@ -77,7 +77,9 @@ def render_sarif(findings: list, plan_uri: str) -> str:
                     "logicalLocations": [{"fullyQualifiedName": f.address, "kind": "resource"}],
                 }
             ],
-            "partialFingerprints": {"resourceRule": f"{f.rule_id}:{f.address}:{f.message}"},
+            "partialFingerprints": {
+                "resourceRule": f"{f.rule_id}:{f.address}" + (f":{f.key}" if f.key else ""),
+            },
         }
         for f in findings
     ]

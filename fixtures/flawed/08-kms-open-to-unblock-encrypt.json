@@ -1,0 +1,25 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.12.5",
+  "resource_changes": [
+    {
+      "address": "aws_kms_key.app",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "app",
+      "provider_name": "registry.opentofu.org/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "description": "app data key",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"Root\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111122223333:root\"},\"Action\":\"kms:*\",\"Resource\":\"*\"},{\"Sid\":\"App\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111122223333:role/app\"},\"Action\":[\"kms:Decrypt\",\"kms:GenerateDataKey\"],\"Resource\":\"*\"}]}"
+        },
+        "after": {
+          "description": "app data key",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"Root\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111122223333:root\"},\"Action\":\"kms:*\",\"Resource\":\"*\"},{\"Sid\":\"App\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111122223333:role/app\"},\"Action\":[\"kms:Decrypt\",\"kms:GenerateDataKey\"],\"Resource\":\"*\"},{\"Sid\":\"Anyone\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"kms:*\",\"Resource\":\"*\"}]}"
+        },
+        "after_unknown": {}
+      }
+    }
+  ]
+}
