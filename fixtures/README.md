@@ -20,6 +20,7 @@ the same shape, trimmed to the attributes the rules read.
 | `05-public-bucket-for-static-site` | "Serve these assets as a static site" | Public ACL, public bucket policy, and the public access block relaxed, where CloudFront with OAC needed none of it | PS007 |
 | `06-admin-to-unblock-ci` | "CI fails with AccessDenied on deploy" | AdministratorAccess on the CI role, and a trust statement that lets any AWS account assume it | PS004 PS005 |
 | `07-refactor-without-moved-block` | "Move the orders resources into a module" | Destroys the table and log group and creates new ones at the module address, because nobody wrote a `moved` block | PS001 PS002 |
+| `08-kms-open-to-unblock-encrypt` | "The app gets AccessDeniedException on Decrypt, fix the key policy" | Adds a statement granting `kms:*` to Principal `*` with no Condition | PS011 |
 
 `clean/01-tags-only` is the control: a tags-only change on resources that
 already carry a wildcard policy and a public 443 rule. It must produce nothing,
