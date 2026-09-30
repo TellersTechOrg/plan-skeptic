@@ -40,6 +40,10 @@ class Finding:
     severity: str
     address: str
     message: str
+    # Distinguishes multiple findings of the same rule on one address in SARIF
+    # fingerprints. Must not be the free-text message: wording changes would
+    # reopen alerts as new.
+    key: str = ""
 
 
 RULES = {
@@ -110,6 +114,12 @@ RULES = {
             "the next mistake recoverable. Turning one off is often the first step "
             "of a plan that deletes something in a later apply.",
         ),
+        Rule(
+            "PS011", "kms-key-policy-any-principal", HIGH,
+            "A KMS key policy allows any principal without a Condition.",
+            "A Principal of `*` with no Condition lets any AWS account use the key. "
+            "Generated policies open this to make encrypt/decrypt errors go away.",
+        ),
     )
 }
 
@@ -132,6 +142,8 @@ STATEFUL_TYPES = frozenset({
 IAM_POLICY_TYPES = frozenset({
     "aws_iam_policy", "aws_iam_role_policy", "aws_iam_user_policy", "aws_iam_group_policy",
 })
+# aws_iam_role carries nested inline_policy blocks; same wildcard rules apply.
+IAM_WILDCARD_TYPES = IAM_POLICY_TYPES | {"aws_iam_role"}
 POLICY_ATTACHMENT_TYPES = frozenset({
     "aws_iam_role_policy_attachment", "aws_iam_user_policy_attachment",
     "aws_iam_group_policy_attachment", "aws_iam_policy_attachment",
@@ -175,8 +187,10 @@ def _new_items(rc: ResourceChange, extract: Callable[[dict], set]) -> list:
     return sorted(after - before, key=str)
 
 
-def _finding(rule_id: str, rc: ResourceChange, message: str, severity: str = "") -> Finding:
-    return Finding(rule_id, severity or RULES[rule_id].severity, rc.address, message)
+def _finding(
+    rule_id: str, rc: ResourceChange, message: str, severity: str = "", key: str = "",
+) -> Finding:
+    return Finding(rule_id, severity or RULES[rule_id].severity, rc.address, message, key)
 
 
 def _as_list(value) -> list:
@@ -208,31 +222,46 @@ def _principal_is_anyone(principal) -> bool:
     return False
 
 
+def _policy_allows_anyone(doc) -> bool:
+    return any(
+        _allows(s) and _principal_is_anyone(s.get("Principal")) and not s.get("Condition")
+        for s in _policy_statements(doc)
+    )
+
+
+def _policy_docs(values: dict) -> list:
+    """Policy documents on a resource: top-level `policy` plus role inline_policy blocks."""
+    docs = [values.get("policy")]
+    for block in _as_list(values.get("inline_policy")):
+        if isinstance(block, dict):
+            docs.append(block.get("policy"))
+    return docs
+
+
 def _wildcard_grants(values: dict) -> set:
     grants = set()
-    for stmt in _policy_statements(values.get("policy")):
-        if not _allows(stmt):
-            continue
-        for action in _as_list(stmt.get("Action")):
-            if isinstance(action, str) and (action == "*" or action.endswith(":*")):
-                grants.add(f"Action {action}")
-        if stmt.get("NotAction") is not None:
-            grants.add("NotAction in an Allow statement")
+    for doc in _policy_docs(values):
+        for stmt in _policy_statements(doc):
+            if not _allows(stmt):
+                continue
+            for action in _as_list(stmt.get("Action")):
+                if isinstance(action, str) and (action == "*" or action.endswith(":*")):
+                    grants.add(f"Action {action}")
+            if stmt.get("NotAction") is not None:
+                grants.add("NotAction in an Allow statement")
     return grants
 
 
 def _anyone_can_assume(values: dict) -> bool:
-    return any(
-        _allows(s) and _principal_is_anyone(s.get("Principal")) and not s.get("Condition")
-        for s in _policy_statements(values.get("assume_role_policy"))
-    )
+    return _policy_allows_anyone(values.get("assume_role_policy"))
 
 
 def _bucket_policy_public(values: dict) -> bool:
-    return any(
-        _allows(s) and _principal_is_anyone(s.get("Principal")) and not s.get("Condition")
-        for s in _policy_statements(values.get("policy"))
-    )
+    return _policy_allows_anyone(values.get("policy"))
+
+
+def _kms_policy_anyone(values: dict) -> bool:
+    return _policy_allows_anyone(values.get("policy"))
 
 
 def _port_label(from_port, to_port) -> str:
@@ -290,10 +319,10 @@ def check_deleted(rc: ResourceChange) -> Iterable[Finding]:
 
 
 def check_iam_wildcard(rc: ResourceChange) -> Iterable[Finding]:
-    if rc.type not in IAM_POLICY_TYPES:
+    if rc.type not in IAM_WILDCARD_TYPES:
         return
     for grant in _new_items(rc, _wildcard_grants):
-        yield _finding("PS003", rc, f"Policy now grants {grant}.")
+        yield _finding("PS003", rc, f"Policy now grants {grant}.", key=grant)
 
 
 def check_broad_attachment(rc: ResourceChange) -> Iterable[Finding]:
@@ -309,7 +338,7 @@ def check_broad_attachment(rc: ResourceChange) -> Iterable[Finding]:
         }
 
     for name in _new_items(rc, broad):
-        yield _finding("PS004", rc, f"Attaches the AWS managed policy {name}.")
+        yield _finding("PS004", rc, f"Attaches the AWS managed policy {name}.", key=name)
 
 
 def check_trust_anyone(rc: ResourceChange) -> Iterable[Finding]:
@@ -320,7 +349,11 @@ def check_trust_anyone(rc: ResourceChange) -> Iterable[Finding]:
 def check_open_ingress(rc: ResourceChange) -> Iterable[Finding]:
     for from_port, to_port, cidr in _new_items(rc, lambda v: _world_ingress(rc.type, v)):
         severity = MEDIUM if _is_web_only(from_port, to_port) else HIGH
-        yield _finding("PS006", rc, f"Opens {_port_label(from_port, to_port)} to {cidr}.", severity)
+        label = _port_label(from_port, to_port)
+        yield _finding(
+            "PS006", rc, f"Opens {label} to {cidr}.", severity,
+            key=f"{from_port}-{to_port}-{cidr}",
+        )
 
 
 def check_s3_public(rc: ResourceChange) -> Iterable[Finding]:
@@ -328,13 +361,16 @@ def check_s3_public(rc: ResourceChange) -> Iterable[Finding]:
         flags = ("block_public_acls", "block_public_policy", "ignore_public_acls", "restrict_public_buckets")
         off = _new_items(rc, lambda v: {f for f in flags if v.get(f) is False})
         if off:
-            yield _finding("PS007", rc, "Public access block disables " + ", ".join(off) + ".")
+            yield _finding(
+                "PS007", rc, "Public access block disables " + ", ".join(off) + ".",
+                key=",".join(off),
+            )
     elif rc.type in ("aws_s3_bucket_acl", "aws_s3_bucket"):
         if _introduced(rc, lambda v: v.get("acl") in PUBLIC_ACLS):
-            yield _finding("PS007", rc, f"Bucket ACL set to {rc.after.get('acl')}.")
+            yield _finding("PS007", rc, f"Bucket ACL set to {rc.after.get('acl')}.", key="acl")
     elif rc.type == "aws_s3_bucket_policy":
         if _introduced(rc, _bucket_policy_public):
-            yield _finding("PS007", rc, "Bucket policy allows Principal * with no Condition.")
+            yield _finding("PS007", rc, "Bucket policy allows Principal * with no Condition.", key="policy")
 
 
 def check_public_database(rc: ResourceChange) -> Iterable[Finding]:
@@ -345,7 +381,7 @@ def check_public_database(rc: ResourceChange) -> Iterable[Finding]:
 def check_encryption_disabled(rc: ResourceChange) -> Iterable[Finding]:
     attr = ENCRYPTION_FLAGS.get(rc.type)
     if attr and _introduced(rc, lambda v: v.get(attr) is False):
-        yield _finding("PS009", rc, f"{attr} = false.")
+        yield _finding("PS009", rc, f"{attr} = false.", key=attr)
 
 
 def check_recovery_guards(rc: ResourceChange) -> Iterable[Finding]:
@@ -358,9 +394,20 @@ def check_recovery_guards(rc: ResourceChange) -> Iterable[Finding]:
             # Defaults on a new resource are not a change a reviewer can weigh,
             # except skip_final_snapshot/force_destroy, which are opt-in.
             if attr in ("skip_final_snapshot", "force_destroy") and rc.after.get(attr) is unsafe:
-                yield _finding("PS010", rc, f"{attr} = {str(unsafe).lower()} on a new data store.")
+                yield _finding(
+                    "PS010", rc, f"{attr} = {str(unsafe).lower()} on a new data store.", key=attr,
+                )
         elif rc.after.get(attr) is unsafe and rc.before.get(attr) is (not unsafe):
-            yield _finding("PS010", rc, f"{attr} changes {str(not unsafe).lower()} -> {str(unsafe).lower()}.")
+            yield _finding(
+                "PS010", rc,
+                f"{attr} changes {str(not unsafe).lower()} -> {str(unsafe).lower()}.",
+                key=attr,
+            )
+
+
+def check_kms_anyone(rc: ResourceChange) -> Iterable[Finding]:
+    if rc.type == "aws_kms_key" and _introduced(rc, _kms_policy_anyone):
+        yield _finding("PS011", rc, "Key policy allows Principal * with no Condition.")
 
 
 CHECKS = (
@@ -374,6 +421,7 @@ CHECKS = (
     check_public_database,
     check_encryption_disabled,
     check_recovery_guards,
+    check_kms_anyone,
 )
 
 
@@ -412,6 +460,7 @@ def review(changes: Iterable[ResourceChange], disabled: Iterable[str] = ()) -> l
                         f.rule_id, f.severity, f.address,
                         f"{f.message} The same object is created at {moved[rc.address]}; "
                         "if this is a refactor, add a `moved` block instead.",
+                        f.key,
                     )
                 findings.append(f)
     findings.sort(key=lambda f: (-SEVERITY_ORDER[f.severity], f.rule_id, f.address))

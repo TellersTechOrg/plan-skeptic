@@ -126,6 +126,11 @@ class FixtureExpectations(unittest.TestCase):
         for f in found:
             self.assertIn("moved", f.message)
 
+    def test_kms_open_to_unblock_encrypt(self):
+        self.assertEqual(findings_for("flawed/08-kms-open-to-unblock-encrypt.json"), {
+            ("PS011", "high", "aws_kms_key.app"),
+        })
+
     def test_clean_plan_has_no_findings(self):
         self.assertEqual(findings_for("clean/01-tags-only.json"), set())
 
@@ -153,6 +158,58 @@ class RuleEdges(unittest.TestCase):
         plan = plan_with(change("aws_iam_policy.x", "aws_iam_policy", ["create"], after={"policy": policy}))
         self.assertEqual(review(load_plan(plan)), [])
 
+    def test_role_inline_policy_wildcard(self):
+        # Nested inline_policy is what generated Terraform often emits instead of
+        # a separate aws_iam_role_policy; missing it was a silent false negative.
+        role = {
+            "name": "app",
+            "assume_role_policy": json.dumps({
+                "Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"},
+                               "Action": "sts:AssumeRole"}],
+            }),
+            "inline_policy": [{
+                "name": "wide",
+                "policy": json.dumps({
+                    "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}],
+                }),
+            }],
+        }
+        plan = plan_with(change("aws_iam_role.x", "aws_iam_role", ["create"], after=role))
+        found = review(load_plan(plan))
+        self.assertEqual([(f.rule_id, f.message, f.key) for f in found], [
+            ("PS003", "Policy now grants Action *.", "Action *"),
+        ])
+
+    def test_role_inline_policy_existing_wildcard_not_reported_again(self):
+        before = {
+            "inline_policy": [{
+                "name": "wide",
+                "policy": json.dumps({"Statement": [{"Effect": "Allow", "Action": "s3:*", "Resource": "*"}]}),
+            }],
+        }
+        after = {
+            "inline_policy": [{
+                "name": "wide",
+                "policy": json.dumps({"Statement": [
+                    {"Effect": "Allow", "Action": "s3:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "kms:*", "Resource": "*"},
+                ]}),
+            }],
+        }
+        plan = plan_with(change("aws_iam_role.x", "aws_iam_role", ["update"], before=before, after=after))
+        found = review(load_plan(plan))
+        self.assertEqual([f.message for f in found], ["Policy now grants Action kms:*."])
+
+    def test_kms_policy_with_condition_is_not_anyone(self):
+        policy = json.dumps({
+            "Statement": [{
+                "Effect": "Allow", "Principal": "*", "Action": "kms:Decrypt", "Resource": "*",
+                "Condition": {"StringEquals": {"kms:CallerAccount": "111122223333"}},
+            }],
+        })
+        plan = plan_with(change("aws_kms_key.x", "aws_kms_key", ["create"], after={"policy": policy}))
+        self.assertEqual(review(load_plan(plan)), [])
+
     def test_trust_policy_with_condition_is_not_anyone(self):
         policy = json.dumps({"Statement": [{"Effect": "Allow", "Principal": {"AWS": "*"}, "Action": "sts:AssumeRole",
                                             "Condition": {"StringEquals": {"aws:PrincipalOrgID": "o-123"}}}]})
@@ -178,6 +235,16 @@ class RuleEdges(unittest.TestCase):
         self.assertEqual([f.severity for f in found][:3], ["high"] * 3)
         self.assertEqual(found[-1].severity, "medium")
 
+    def test_fingerprint_ignores_message_wording(self):
+        found = review(load_plan(fixture("flawed/03-iam-wildcard-creep.json")))
+        keys = {(f.rule_id, f.address, f.key) for f in found}
+        self.assertEqual(keys, {
+            ("PS003", "aws_iam_policy.exporter", "Action kms:*"),
+            ("PS003", "aws_iam_policy.exporter", "Action s3:*"),
+            ("PS003", "aws_iam_role_policy.ci_deploy", "NotAction in an Allow statement"),
+        })
+        for f in found:
+            self.assertNotEqual(f.key, f.message)
 
 class PlanLoading(unittest.TestCase):
     def test_binary_plan_is_refused(self):
@@ -243,6 +310,9 @@ class Cli(unittest.TestCase):
             loc = result["locations"][0]
             self.assertIn("physicalLocation", loc, "code scanning drops results without one")
             self.assertTrue(loc["logicalLocations"][0]["fullyQualifiedName"].startswith("aws_s3_"))
+            fp = result["partialFingerprints"]["resourceRule"]
+            self.assertTrue(fp.startswith("PS007:"), fp)
+            self.assertNotIn("Bucket", fp, "message wording must not enter the fingerprint")
 
     def test_output_file_plus_text_summary(self):
         with tempfile.TemporaryDirectory() as tmp:

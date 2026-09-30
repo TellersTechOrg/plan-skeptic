@@ -35,6 +35,13 @@ runs:
         PS_DISABLE: ${{ inputs.disable }}
         PYTHONPATH: ${{ github.action_path }}/src
       run: |
+        set -euo pipefail
         args=(--format sarif --output "$PS_SARIF" --fail-on "$PS_FAIL_ON")
         for rule in $PS_DISABLE; do args+=(--disable "$rule"); done
-        python3 -m plan_skeptic "${args[@]}" "$PS_PLAN"
+        # Text summary always goes to stdout when SARIF is written to a file;
+        # tee it into the job summary so findings are visible without code scanning.
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          python3 -m plan_skeptic "${args[@]}" "$PS_PLAN" | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          python3 -m plan_skeptic "${args[@]}" "$PS_PLAN"
+        fi
