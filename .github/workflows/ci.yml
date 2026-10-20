@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: ubuntu-latest became Ubuntu 26.04 on 2026-10-19 (see the PR that added this line)
     strategy:
       matrix:
         python: ["3.9", "3.13"]
@@ -24,7 +24,7 @@ jobs:
   action:
     # Runs the composite action against the fixtures: a clean plan must pass
     # and a flawed one must fail, or the action is not gating anything.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: ubuntu-latest became Ubuntu 26.04 on 2026-10-19 (see the PR that added this line)
     steps:
       - uses: actions/checkout@v4
       - name: Clean plan passes
